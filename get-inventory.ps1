@@ -39,8 +39,7 @@
 .FUNCTIONALITY
    Опросить удаленные компьютеры, получить информацию о hardware & OS установленных на этих компьютерах. Изменения на удаленные компьютеры не вносятся. 
 #>
-function Get-RemoteHardwareSoftwareInfo {
-    [CmdletBinding(DefaultParameterSetName='Parameter Set 1', 
+[CmdletBinding(DefaultParameterSetName='Parameter Set 1', 
                   #SupportsShouldProcess=$true, 
                   PositionalBinding=$false,
                   HelpUri = 'http://www.ukrtelecom.ua/', #Change This :)
@@ -71,90 +70,99 @@ function Get-RemoteHardwareSoftwareInfo {
         ## Маска для поиска серверов, также можно добавить сервера, которые необходимо исключить из опроса
         #[Parameter(ParameterSetName='Servers Filter Set')]
         [string]$OutputCsvFile,
-        [string]$ADDomainName,
-        [string[]]$ADControllers
+        [array]$servers,
+        [array]$remoteservers
+        #[string]$ADDomainName,
+        #[string[]]$ADControllers
     )
 
-    Begin
-    {
-    #[Threading.Thread]::CurrentThread.CurrentUICulture = 'en-US';
-    if ($SearchBaseAD -eq "") {
-        $SearchBaseAD = 'OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc'    
-        }
-    if ($ServersFilter -eq "") {
-        $ServersFilter = "OperatingSystem -like '*Windows Server*' 
-        -and (dnshostname -like 'kv-crm*'`
-        -and  dnshostname -notlike 'kv-crmadm*'`
-        -and  dnshostname -notlike 'kv-crmtst*'`
-        -and  dnshostname -notlike 'kv-crmprp*')"   
-        }
-    if ($OutputCsvFile -eq "") {
-        $OutputCsvFile="c:\temp\Server_Inventory_$((Get-Date).ToString('dd-MM-yyyy')).csv"
-        }    
-    if ($ADDomainName -eq "") {
-            $ADDomainName="ukrtelecom.loc"
+    Function Get-ServersFromOU  {
+
+        if ($SearchBaseAD -eq "") {
+            $SearchBaseAD = 'OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc'    
             }
+        if ($ServersFilter -eq "") {
+            $ServersFilter = "OperatingSystem -like '*Windows Server*' 
+            -and (dnshostname -like 'kv-crm*'`
+            -and  dnshostname -notlike 'kv-crmadm*'`
+            -and  dnshostname -notlike 'kv-crmtst*'`
+            -and  dnshostname -notlike 'kv-crmprp*')"   
+            }
+        if ($script:OutputCsvFile -eq "") {
+            $script:OutputCsvFile = "c:\temp\Server_Inventory_$((Get-Date).ToString('dd-MM-yyyy')).csv"
+            }    
+        $CurrUser=($env:USERNAME).ToString()
         
-        if ($ADControllers -eq $null) {
-            $ADControllers=Get-ADForest $ADDomainName | Select-Object -Expand GlobalCatalogs -First 1
-            #$ADControllers=(Resolve-DnsName -Type NS $ADDomainName).namehost
-        }
-    Write-Host "ADControllers[0]="$ADControllers[0]
-    Write-Host "ADControllers[1]="$ADControllers[1]
-    #exit
-    $CurrUser=($env:USERNAME).ToString()
-    [array]$servers=""
-    if ($CurrUser -notmatch "adm") {$Cred = Get-Credential -UserName "Corp\adm-odubel" `
-     -Message "Согласно политике принятой в УТК, учетная запись для доступа к серверам должна начинатся c adm-" 
-     #Write-Host "sdfsfsaf=$cred.GetNetworkCredential().password"
-            if ($Cred.GetNetworkCredential().password -eq "") 
-            {
-             Write-Host "You didn't entered password. Exiting..." -ForegroundColor Red
-             exit 
-            }
-    for ($i = 0; $i -lt $ADControllers.Count; $i++) {
-        try { $servers = (Get-ADComputer -Server $ADControllers[$i]  -Credential $Cred -SearchBase $SearchBaseAD -Filter $ServersFilter).name }
-        catch  {
-            Write-Host "Can't contact AD controller $ADControllers[$i] to get list of servers in OU" -ForegroundColor Yellow
-                if ($i -eq ($ADControllers.Count-1)) {
-                Write-Host "Exiting..." -ForegroundColor Red
-                exit
-                    }
+        if ($CurrUser -notmatch "adm") {$Cred = Get-Credential -UserName "Corp\adm-odubel" `
+         -Message "Согласно политике принятой в УТК, учетная запись для доступа к серверам должна начинатся c adm-" 
+         #Write-Host "sdfsfsaf=$cred.GetNetworkCredential().password"
+                if ($Cred.GetNetworkCredential().password -eq "") 
+                {
+                 Write-Host "You didn't entered password. Exiting..." -ForegroundColor Red
+                 exit 
                 }
-            }
-        }
-    else 
-        {
-        for ($i = 0; $i -lt $ADControllers.Count; $i++) { 
-        try { $servers = (Get-ADComputer -Server '$ADControllers[$i]' -SearchBase $SearchBaseAD -Filter $ServersFilter).name }
-            catch   {
-                Write-Host "Can't contact AD controller" $ADControllers[$i] "to get list of servers in OU" -ForegroundColor Yellow
+        #for ($i = 0; $i -lt $ADControllers.Count; $i++) {
+            try { $script:servers = (Get-ADComputer  -Credential $Cred -SearchBase $SearchBaseAD -Filter $ServersFilter).name }
+            catch  {
+                Write-Host "Can't contact AD controller to get list of servers in OU" -ForegroundColor Yellow
                     if ($i -eq ($ADControllers.Count-1)) {
                     Write-Host "Exiting..." -ForegroundColor Red
-                    #exit
+                    exit
                         }
                     }
-        #$servers = (Get-ADComputer -SearchBase "OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc" -Filter { OperatingSystem -Like "*Windows Server*" -and dnshostname -like "kv-crmapp*" }).name    
-                }
-        }        
-    $servers=(Get-ADComputer -Server $ADControllers[0] -SearchBase $SearchBaseAD -Filter $ServersFilter).name
-    Write-Host "servers="$servers -BackgroundColor Cyan
-    exit 
-    #$servers = (Get-ADComputer -SearchBase $SearchBaseAD -Filter $ServersFilter).name
-    #Get-ADComputer -Filter "Name -like ""$PartialName""" | select -ExpandProperty Name
-    #$servers = (Get-ADComputer -SearchBase "OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc" -Filter ($ServersFilter)).name
-    $servers+="kv-ho-shk2-n058" #Adding computers just for script test
-    $servers+="HO-SHK2-N084"    #Adding computers just for script test
-    $servers+="HO-SHK2-N033"    #Adding computers just for script test
-
-    $infoObject	= ""  
-    #$PSObject	= ""
-    $xxx		= 0
+                #}
+            }
+        else 
+            {
+            #for ($i = 0; $i -lt $ADControllers.Count; $i++) { 
+            try { $script:servers = (Get-ADComputer -SearchBase $SearchBaseAD -Filter $ServersFilter).name }
+                catch   {
+                    Write-Host "Can't contact AD controller to get list of servers in OU" -ForegroundColor Yellow
+                        if ($i -eq ($ADControllers.Count-1)) {
+                        Write-Host "Exiting..." -ForegroundColor Red
+                        #exit
+                            }
+                        }
+            #$servers = (Get-ADComputer -SearchBase "OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc" -Filter { OperatingSystem -Like "*Windows Server*" -and dnshostname -like "kv-crmapp*" }).name    
+                    #}
+            }        
+        #$servers=(Get-ADComputer -SearchBase $SearchBaseAD -Filter $ServersFilter).name
+        #Write-Host "servers="$servers -BackgroundColor Cyan
+        #exit 
+        #$servers = (Get-ADComputer -SearchBase $SearchBaseAD -Filter $ServersFilter).name
+        #Get-ADComputer -Filter "Name -like ""$PartialName""" | select -ExpandProperty Name
+        #$servers = (Get-ADComputer -SearchBase "OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc" -Filter ($ServersFilter)).name
+        $script:servers+="kv-ho-shk2-n058" #Adding computers just for script test
+        $script:servers+="HO-SHK2-N084"    #Adding computers just for script test
+        $script:servers+="HO-SHK2-N033"    #Adding computers just for script test
+        $LocalHostName = $env:COMPUTERNAME
+        $servers.Count
+        Write-Host   "servers.Count"=$servers.Count
+        for ($i = 0; $i -lt $servers.Count; $i++) {
+            Write-Host "i="$i" " -NoNewline
+            Write-Host   "script:servers.Count"=($script:servers).Count #| Get-TypeData
+            if ($servers[$i] -eq $LocalHostName) {Write-host "localhostnamefound"}
+        }
+    exit
     }
+    function Get-HardwareSoftwareInfo ($servers, $OutputCsvFile)
+    {
+        Begin
+        {
+        #[Threading.Thread]::CurrentThread.CurrentUICulture = 'en-US';
+        $infoObject	= ""  
+        #$PSObject	= ""
+        $xxx		= 0
+        }
     
 	Process
     {
-    Invoke-Command -ComputerName $servers -ScriptBlock {
+        #Write-Host "servers="$servers
+        #Write-Host "outputcsvfile="$OutputCsvFile
+        #Exit
+        #Write-Host "script:servers="$script:servers
+        #Write-Host "script:servers="$:servers
+    Invoke-Command -ComputerName $script:servers -ScriptBlock {
             $CPUInfo				= Get-WmiObject -class Win32_Processor            #Get CPU Information
 	        $OSInfo					= Get-WmiObject -class Win32_OperatingSystem      #Get OS Information
 	        $CompInfo				= Get-WmiObject -class Win32_ComputerSystem
@@ -217,8 +225,9 @@ function Get-RemoteHardwareSoftwareInfo {
         }   
         $infoObject #Output to the screen for a visual feedback.
 	} | Select-Object * -ExcludeProperty PSComputerName, RunspaceId, PSShowComputerName | Sort-Object servername | `
- Export-Csv -path $OutputCsvFile -NoTypeInformation -Encoding UTF8 #Export the results in csv file.
+ Export-Csv -path $script:OutputCsvFile -NoTypeInformation -Encoding UTF8 #Export the results in csv file.
      }
     End {  }
 }
-Get-RemoteHardwareSoftwareInfo
+Get-ServersFromOU $servers
+Get-HardwareSoftwareInfo $servers, $OutputCsvFile
