@@ -1,4 +1,4 @@
-﻿<#
+<#
 .Synopsis
    Данный скрипт позволяет опросить сервера в AD и получить их физические и логические параметры
 .DESCRIPTION
@@ -59,32 +59,35 @@ function Get-RemoteHardwareSoftwareInfo
                    ValueFromRemainingArguments=$false, 
                    Position = 0,
                    ParameterSetName='Search will be in specified OU in AD')]
-        [ValidateNotNull()]
-        [ValidateNotNullOrEmpty()]
+        #[ValidateNotNull()]
+        #[ValidateNotNullOrEmpty()]
         #[ValidateCount(0,5)]
         #[ValidateSet("sun", "moon", "earth")]
         [String]
         #$SearchBaseAD= "OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc",
-        $SearchBaseAD= 'OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc',
+        $SearchBaseAD #= ""
+        #= 'OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc',
 
         # Маска для поиска серверов, также можно добавить сервера, которые необходимо исключить из опроса
-        [Parameter(ParameterSetName='Servers Filter Set')]
-        Position = 1,
+        [Parameter(ParameterSetName='Servers Filter Set',
+        Position = 1)]
 		#$ServersFilter = "{ OperatingSystem -Like `"*Windows Server*`" -and dnshostname -like `"kv-crm*`"}"
         $ServersFilter = "OperatingSystem`
-            -like '*Windows Server*'` 
+            -like '*Windows Server*'`
             -and (dnshostname -like 'kv-crm*'`
             -and  dnshostname -notlike 'kv-crmadm*'`
-            -and  dnshostname -notlike 'kv-crmtst*'` 
+            -and  dnshostname -notlike 'kv-crmtst*'`
             -and  dnshostname -notlike 'kv-crmprp*')",
-        # Маска для поиска серверов, также можно добавить сервера, которые необходимо исключить из опроса
-        [Parameter(ParameterSetName='Servers Filter Set')]
+        ## Маска для поиска серверов, также можно добавить сервера, которые необходимо исключить из опроса
+        #[Parameter(ParameterSetName='Servers Filter Set')]
         $OutputCsvFile="c:\temp\Server_Inventory_$((Get-Date).ToString('dd-MM-yyyy')).csv"
     )
 
     Begin
     {
     #[Threading.Thread]::CurrentThread.CurrentUICulture = 'en-US';
+    $SearchBaseAD = 'OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc'
+
     $CurrUser=($env:USERNAME).ToString()
     [array]$servers=""
     if ($CurrUser -notmatch "adm") {$Cred = Get-Credential -UserName "Corp\adm-odubel" `
@@ -92,7 +95,7 @@ function Get-RemoteHardwareSoftwareInfo
      #Write-Host "sdfsfsaf=$cred.GetNetworkCredential().password"
             if ($Cred.GetNetworkCredential().password -eq "") 
             {
-             Write-Host "You didn't entered password. Exiting..."
+             Write-Host "You didn't entered password. Exiting..." -ForegroundColor Red
              exit 
             }
     try { $servers = (Get-ADComputer -Credential $Cred -SearchBase $SearchBaseAD -Filter $ServersFilter).name }
@@ -115,12 +118,12 @@ function Get-RemoteHardwareSoftwareInfo
     #$servers = (Get-ADComputer -SearchBase $SearchBaseAD -Filter $ServersFilter).name
     #Get-ADComputer -Filter "Name -like ""$PartialName""" | select -ExpandProperty Name
     #$servers = (Get-ADComputer -SearchBase "OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc" -Filter ($ServersFilter)).name
-    #$servers+="kv-ho-shk2-n058" #.corp.ukrtelecom.loc"
-    $servers+="HO-SHK2-N084" #Adding computers just for script test
-    $servers+="HO-SHK2-N033" #Adding computers just for script test
+    $servers+="kv-ho-shk2-n058" #Adding computers just for script test
+    $servers+="HO-SHK2-N084"    #Adding computers just for script test
+    $servers+="HO-SHK2-N033"    #Adding computers just for script test
 
     $infoObject	= ""  
-    $PSObject	= ""
+    #$PSObject	= ""
     $xxx		= 0
     }
     
@@ -141,7 +144,7 @@ function Get-RemoteHardwareSoftwareInfo
     $infoObject = New-Object PSObject
     if (($CPUInfo.Name).count -ge 2) {$CPUInfoName=$CPUInfo.Name[0]}
         else { $CPUInfoName=$CPUInfo.Name } 
-        Add-Member -inputObject $infoObject -memberType NoteProperty -name "ServerName"					-value $CompInfo.Name
+        Add-Member -inputObject $infoObject -memberType NoteProperty -name "ServerName"				    -value $CompInfo.Name
 		Add-Member -inputObject $infoObject -memberType NoteProperty -name "Processor"					-value $CPUInfoName
 		Add-Member -inputObject $infoObject -memberType NoteProperty -name "Manufacturer"				-value $CompInfo.Manufacturer
 		Add-Member -inputObject $infoObject -memberType NoteProperty -name "PhysicalCores"				-value $CompInfo.NumberOfProcessors
