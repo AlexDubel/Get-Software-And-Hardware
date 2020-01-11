@@ -47,7 +47,7 @@ function Get-RemoteHardwareSoftwareInfo
                   SupportsShouldProcess=$true, 
                   PositionalBinding=$false,
                   HelpUri = 'http://www.microsoft.com/',
-                  ConfirmImpact='Medium')]
+                  ConfirmImpact='Low')] #только опрашиваем, поэтому влияние отсутствует (минимально).
     [Alias()]
     [OutputType([String])]
     Param
@@ -57,8 +57,8 @@ function Get-RemoteHardwareSoftwareInfo
                    ValueFromPipeline=$true,
                    ValueFromPipelineByPropertyName=$true, 
                    ValueFromRemainingArguments=$false, 
-                   Position=0,
-                   ParameterSetName='Search Base AD')]
+                   Position = 0,
+                   ParameterSetName='Search will be in specified OU in AD')]
         [ValidateNotNull()]
         [ValidateNotNullOrEmpty()]
         #[ValidateCount(0,5)]
@@ -69,10 +69,8 @@ function Get-RemoteHardwareSoftwareInfo
 
         # Маска для поиска серверов, также можно добавить сервера, которые необходимо исключить из опроса
         [Parameter(ParameterSetName='Servers Filter Set')]
-        #[ValidatePattern("[a-z]*")]
-        #[ValidateLength(0,15)]
-        #[String]
-        #$ServersFilter = "{ OperatingSystem -Like `"*Windows Server*`" -and dnshostname -like `"kv-crmapp*`"}"
+        Position = 1,
+		#$ServersFilter = "{ OperatingSystem -Like `"*Windows Server*`" -and dnshostname -like `"kv-crm*`"}"
         $ServersFilter = "OperatingSystem`
             -like '*Windows Server*'` 
             -and (dnshostname -like 'kv-crm*'`
@@ -86,7 +84,7 @@ function Get-RemoteHardwareSoftwareInfo
 
     Begin
     {
-    [Threading.Thread]::CurrentThread.CurrentUICulture = 'en-US';
+    #[Threading.Thread]::CurrentThread.CurrentUICulture = 'en-US';
     $CurrUser=($env:USERNAME).ToString()
     [array]$servers=""
     if ($CurrUser -notmatch "adm") {$Cred = Get-Credential -UserName "Corp\adm-odubel" `
@@ -118,56 +116,54 @@ function Get-RemoteHardwareSoftwareInfo
     #Get-ADComputer -Filter "Name -like ""$PartialName""" | select -ExpandProperty Name
     #$servers = (Get-ADComputer -SearchBase "OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc" -Filter ($ServersFilter)).name
     #$servers+="kv-ho-shk2-n058" #.corp.ukrtelecom.loc"
-    $servers+="HO-SHK2-N084"
-    $servers+="HO-SHK2-N033"
+    $servers+="HO-SHK2-N084" #Adding computers just for script test
+    $servers+="HO-SHK2-N033" #Adding computers just for script test
 
-    #$servers+="10.5.35.149"
-    $infoObject = ""  
-    $PSObject   = ""
-    $xxx        = 0
+    $infoObject	= ""  
+    $PSObject	= ""
+    $xxx		= 0
     }
-    Process
+    
+	Process
     {
-    #New-PSSession -ComputerName $Servers 
-    #Get-ComputerInfo
     Invoke-Command -ComputerName $servers -ScriptBlock {
-            $CPUInfo              = Get-WmiObject -class Win32_Processor            #Get CPU Information
-	        $OSInfo               = Get-WmiObject -class Win32_OperatingSystem      #Get OS Information
-	        $CompInfo             = Get-WmiObject -class Win32_ComputerSystem
+            $CPUInfo				= Get-WmiObject -class Win32_Processor            #Get CPU Information
+	        $OSInfo					= Get-WmiObject -class Win32_OperatingSystem      #Get OS Information
+	        $CompInfo				= Get-WmiObject -class Win32_ComputerSystem
             #Get Memory Information. The data will be shown in a table as MB, rounded to the nearest second decimal.
-	        $OSTotalVirtualMemory = [math]::round($OSInfo.TotalVirtualMemorySize / 1MB, 2)
-	        $OSTotalVisibleMemory = [math]::round(($OSInfo.TotalVisibleMemorySize / 1MB), 2)
-	        $PhysicalMemory       = Get-WmiObject CIM_PhysicalMemory | Measure-Object -Property capacity -Sum | % { [Math]::Round(($_.sum / 1GB), 2) }
-            $VolumeTemp           = Get-CimInstance Win32_LogicalDisk -Filter drivetype=3
-            $IPAddressName        = Get-NetIPAddress  -AddressFamily IPv4 | where { $PSItem.InterfaceAlias -notmatch 'Loopback'} | Select IPAddress
-            $IPSubNetName         = (Get-WmiObject Win32_NetworkAdapterConfiguration | Where IPEnabled | Select IPSubnet).IPSubnet
-        #$nwINFO               = Get-WmiObject Win32_NetworkAdapterConfiguration
+	        $OSTotalVirtualMemory	= [math]::round($OSInfo.TotalVirtualMemorySize / 1MB, 2)
+	        $OSTotalVisibleMemory	= [math]::round(($OSInfo.TotalVisibleMemorySize / 1MB), 2)
+	        $PhysicalMemory			= Get-WmiObject CIM_PhysicalMemory | Measure-Object -Property capacity -Sum | % { [Math]::Round(($_.sum / 1GB), 2) }
+            $VolumeTemp				= Get-CimInstance Win32_LogicalDisk -Filter drivetype=3
+            $IPAddressName			= Get-NetIPAddress  -AddressFamily IPv4 | where { $PSItem.InterfaceAlias -notmatch 'Loopback'} | Select IPAddress
+            $IPSubNetName			= (Get-WmiObject Win32_NetworkAdapterConfiguration | Where IPEnabled | Select IPSubnet).IPSubnet
+			#$nwINFO				= Get-WmiObject Win32_NetworkAdapterConfiguration
     $infoObject = New-Object PSObject
     if (($CPUInfo.Name).count -ge 2) {$CPUInfoName=$CPUInfo.Name[0]}
         else { $CPUInfoName=$CPUInfo.Name } 
-        Add-Member -inputObject $infoObject -memberType NoteProperty -name "ServerName"              -value $CompInfo.Name
-		Add-Member -inputObject $infoObject -memberType NoteProperty -name "Processor"               -value $CPUInfoName
-		Add-Member -inputObject $infoObject -memberType NoteProperty -name "Manufacturer"            -value $CompInfo.Manufacturer
-		Add-Member -inputObject $infoObject -memberType NoteProperty -name "PhysicalCores"           -value $CompInfo.NumberOfProcessors
-        Add-Member -inputObject $infoObject -memberType NoteProperty -name "LogicalCores"            -value $CompInfo.NumberOfLogicalProcessors
-        Add-Member -inputObject $infoObject -memberType NoteProperty -name "OS_Name"                 -value $OSInfo.Caption
-		Add-Member -inputObject $infoObject -memberType NoteProperty -name "OS_Version"              -value $OSInfo.Version
-		Add-Member -inputObject $infoObject -memberType NoteProperty -name "TotalPhysical_Memory_GB" -value $PhysicalMemory
-		Add-Member -inputObject $infoObject -memberType NoteProperty -name "TotalVirtual_Memory_MB"  -value $OSTotalVirtualMemory
-		#Add-Member -inputObject $infoObject -memberType NoteProperty -name "Model"                   -value $CPUInfo.Caption
-        #Add-Member -inputObject $infoObject -memberType NoteProperty -name "PhysicalCores"           -value $CPUInfo.NumberOfCores
-        #Add-Member -inputObject $infoObject -memberType NoteProperty -name "CPU_L2CacheSize"         -value $CPUInfo.L2CacheSize
-		#Add-Member -inputObject $infoObject -memberType NoteProperty -name "CPU_L3CacheSize"         -value $CPUInfo.L3CacheSize
-		#Add-Member -inputObject $infoObject -memberType NoteProperty -name "Sockets"                 -value $CPUInfo.SocketDesignation
+        Add-Member -inputObject $infoObject -memberType NoteProperty -name "ServerName"					-value $CompInfo.Name
+		Add-Member -inputObject $infoObject -memberType NoteProperty -name "Processor"					-value $CPUInfoName
+		Add-Member -inputObject $infoObject -memberType NoteProperty -name "Manufacturer"				-value $CompInfo.Manufacturer
+		Add-Member -inputObject $infoObject -memberType NoteProperty -name "PhysicalCores"				-value $CompInfo.NumberOfProcessors
+        Add-Member -inputObject $infoObject -memberType NoteProperty -name "LogicalCores"				-value $CompInfo.NumberOfLogicalProcessors
+        Add-Member -inputObject $infoObject -memberType NoteProperty -name "OS_Name"					-value $OSInfo.Caption
+		Add-Member -inputObject $infoObject -memberType NoteProperty -name "OS_Version"					-value $OSInfo.Version
+		Add-Member -inputObject $infoObject -memberType NoteProperty -name "TotalPhysical_Memory_GB"	-value $PhysicalMemory
+		Add-Member -inputObject $infoObject -memberType NoteProperty -name "TotalVirtual_Memory_MB"		-value $OSTotalVirtualMemory
+		#Add-Member -inputObject $infoObject -memberType NoteProperty -name "Model"						-value $CPUInfo.Caption
+        #Add-Member -inputObject $infoObject -memberType NoteProperty -name "PhysicalCores"				-value $CPUInfo.NumberOfCores
+        #Add-Member -inputObject $infoObject -memberType NoteProperty -name "CPU_L2CacheSize"			-value $CPUInfo.L2CacheSize
+		#Add-Member -inputObject $infoObject -memberType NoteProperty -name "CPU_L3CacheSize"			-value $CPUInfo.L3CacheSize
+		#Add-Member -inputObject $infoObject -memberType NoteProperty -name "Sockets"					-value $CPUInfo.SocketDesignation
 		
-        $VolumeSize           = $VolumeTemp | % { [Math]::Round(($PSItem.Size / 1GB), 2)}
-        $VolumeName           = ($VolumeTemp).Name
+        $VolumeSize	= $VolumeTemp | % { [Math]::Round(($PSItem.Size / 1GB), 2)}
+        $VolumeName	= ($VolumeTemp).Name
 
         $xxx=$VolumeName.Count
         While ($xxx -ge 1)
         {
         $NameVol=$VolumeName[$xxx-1][0]
-        Add-Member -inputObject $infoObject -memberType NoteProperty -name "VolumeName_$NameVol" -Value $VolumeSize[$xxx-1]
+        Add-Member -inputObject $infoObject -memberType NoteProperty -name "VolumeName_$NameVol"	-Value $VolumeSize[$xxx-1]
         #Test
         #Add-Member -inputObject $infoObject -memberType NoteProperty -name "VolumeName_D" -Value $VolumeSize[$xxx-1]
         $xxx-=1; 
@@ -181,15 +177,15 @@ function Get-RemoteHardwareSoftwareInfo
         $xxx=$IPAddr.Count
         if ($xxx -gt 1) {
         While ($xxx -ge 1) {
-        Add-Member -inputObject $infoObject -memberType NoteProperty -name "IPAddr_$xxx" -Value $IPAddr[$xxx-1]
+        Add-Member -inputObject $infoObject -memberType NoteProperty -name "IPAddr_$xxx"	-Value $IPAddr[$xxx-1]
         # !! Надо проверить дополнительно, на адресах, у которых маска не /24 !!
-        Add-Member -inputObject $infoObject -memberType NoteProperty -name "IPSubnet_$xxx" -Value $IPSubNetName[0]
+        Add-Member -inputObject $infoObject -memberType NoteProperty -name "IPSubnet_$xxx"	-Value $IPSubNetName[0]
         $xxx-=1;           }
                         }
         else {
         #$IPAddr=($IPAddressName).IPAddress
-        Add-Member -inputObject $infoObject -memberType NoteProperty -name "IPAddr_$xxx" -Value $IPAddr 
-        Add-Member -inputObject $infoObject -memberType NoteProperty -name "IPSubnet_$xxx" -Value $IPSubNetName[0]
+        Add-Member -inputObject $infoObject -memberType NoteProperty -name "IPAddr_$xxx" 	-Value $IPAddr 
+        Add-Member -inputObject $infoObject -memberType NoteProperty -name "IPSubnet_$xxx"	-Value $IPSubNetName[0]
         }   
         $infoObject #Output to the screen for a visual feedback.
 	} | Select-Object * -ExcludeProperty PSComputerName, RunspaceId, PSShowComputerName | sort servername | `
