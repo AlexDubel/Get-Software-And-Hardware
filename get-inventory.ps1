@@ -107,16 +107,14 @@ function Get-RemoteHardwareSoftwareInfo
     #New-PSSession -ComputerName $Servers 
     #Get-ComputerInfo
     Invoke-Command -ComputerName $servers -ScriptBlock {
-            $CPUInfo              = Get-WmiObject Win32_Processor            #Get CPU Information
-	        $OSInfo               = Get-WmiObject Win32_OperatingSystem      #Get OS Information
+            $CPUInfo              = Get-WmiObject -class Win32_Processor            #Get CPU Information
+	        $OSInfo               = Get-WmiObject -class Win32_OperatingSystem      #Get OS Information
 	        $CompInfo             = Get-WmiObject -class Win32_ComputerSystem
             #Get Memory Information. The data will be shown in a table as MB, rounded to the nearest second decimal.
 	        $OSTotalVirtualMemory = [math]::round($OSInfo.TotalVirtualMemorySize / 1MB, 2)
 	        $OSTotalVisibleMemory = [math]::round(($OSInfo.TotalVisibleMemorySize / 1MB), 2)
 	        $PhysicalMemory       = Get-WmiObject CIM_PhysicalMemory | Measure-Object -Property capacity -Sum | % { [Math]::Round(($_.sum / 1GB), 2) }
-            #$VolumeTemp           = (Get-CimInstance Win32_LogicalDisk -Filter drivetype=3)
-            $VolumeSize           = (Get-CimInstance Win32_LogicalDisk -Filter drivetype=3) | % { [Math]::Round(($PSItem.Size / 1GB), 2)}
-            $VolumeName           = (Get-CimInstance Win32_LogicalDisk -Filter drivetype=3).Name
+            $VolumeTemp           = Get-CimInstance Win32_LogicalDisk -Filter drivetype=3
             $IPAddressName        = Get-NetIPAddress  -AddressFamily IPv4 | where { $PSItem.InterfaceAlias -notmatch 'Loopback'} | Select IPAddress
             $IPSubNetName         = (Get-WmiObject Win32_NetworkAdapterConfiguration | Where IPEnabled | Select IPSubnet).IPSubnet
         #$nwINFO               = Get-WmiObject Win32_NetworkAdapterConfiguration
@@ -138,6 +136,9 @@ function Get-RemoteHardwareSoftwareInfo
 		#Add-Member -inputObject $infoObject -memberType NoteProperty -name "CPU_L3CacheSize"         -value $CPUInfo.L3CacheSize
 		#Add-Member -inputObject $infoObject -memberType NoteProperty -name "Sockets"                 -value $CPUInfo.SocketDesignation
 		
+        $VolumeSize           = $VolumeTemp | % { [Math]::Round(($PSItem.Size / 1GB), 2)}
+        $VolumeName           = ($VolumeTemp).Name
+
         $xxx=$VolumeName.Count
         While ($xxx -ge 1)
         {
