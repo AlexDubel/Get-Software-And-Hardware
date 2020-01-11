@@ -42,15 +42,17 @@ function Get-RemoteHardwareSoftwareInfo
         [ValidateNotNullOrEmpty()]
         #[ValidateCount(0,5)]
         #[ValidateSet("sun", "moon", "earth")]
-        #[String]
-        $SearchBaseAD= "OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc",
+        [String]
+        #$SearchBaseAD= "OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc",
+        $SearchBaseAD= 'OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc',
 
         # Справочное описание параметра 2
         [Parameter(ParameterSetName='Servers Filter Set')]
         #[ValidatePattern("[a-z]*")]
         #[ValidateLength(0,15)]
         #[String]
-        $ServersFilter = "{ OperatingSystem -Like `"*Windows Server*`" -and dnshostname -like `"kv-crmapp*`"}"
+        #$ServersFilter = "{ OperatingSystem -Like `"*Windows Server*`" -and dnshostname -like `"kv-crmapp*`"}"
+        $ServersFilter = "OperatingSystem -Like '*Windows Server*' -and dnshostname -like 'kv-crmapp*'"
     )
 
     Begin
@@ -66,13 +68,15 @@ function Get-RemoteHardwareSoftwareInfo
              Write-Host "You didn't entered password. Exiting..."
              exit 
             }
-    $servers = (Get-ADComputer -Credential $Cred -SearchBase "OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc" -Filter { OperatingSystem -Like "*Windows Server*" -and dnshostname -like "kv-crmapp*" }).name    
+    #$servers = (Get-ADComputer -Credential $Cred -SearchBase "OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc" -Filter { OperatingSystem -Like "*Windows Server*" -and dnshostname -like "kv-crmapp*" }).name    
+    $servers = (Get-ADComputer -Credential $Cred -SearchBase $SearchBaseAD -Filter $ServersFilter).name
     }
     else 
     {
-    $servers = (Get-ADComputer -SearchBase "OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc" -Filter { OperatingSystem -Like "*Windows Server*" -and dnshostname -like "kv-crmapp*" }).name    
-    }
+    #$servers = (Get-ADComputer -SearchBase "OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc" -Filter { OperatingSystem -Like "*Windows Server*" -and dnshostname -like "kv-crmapp*" }).name    
     $servers = (Get-ADComputer -SearchBase $SearchBaseAD -Filter $ServersFilter).name
+    }
+    #$servers = (Get-ADComputer -SearchBase $SearchBaseAD -Filter $ServersFilter).name
     #Get-ADComputer -Filter "Name -like ""$PartialName""" | select -ExpandProperty Name
     #$servers = (Get-ADComputer -SearchBase "OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc" -Filter ($ServersFilter)).name
     $servers+="kv-ho-shk2-n058" #.corp.ukrtelecom.loc"
@@ -83,8 +87,7 @@ function Get-RemoteHardwareSoftwareInfo
     Process
     {
     Invoke-Command -ComputerName $servers -ScriptBlock {
-
-	$CPUInfo              = Get-WmiObject Win32_Processor            #Get CPU Information
+    $CPUInfo              = Get-WmiObject Win32_Processor            #Get CPU Information
 	$OSInfo               = Get-WmiObject Win32_OperatingSystem      #Get OS Information
 	$CompInfo             = Get-WmiObject -class Win32_ComputerSystem
     #Get Memory Information. The data will be shown in a table as MB, rounded to the nearest second decimal.
@@ -94,36 +97,23 @@ function Get-RemoteHardwareSoftwareInfo
     $VolumeSize           = (Get-CimInstance Win32_LogicalDisk -Filter drivetype=3) | % { [Math]::Round(($PSItem.Size / 1GB), 2)}
     $VolumeName           = (Get-CimInstance Win32_LogicalDisk -Filter drivetype=3).Name
     
-    #$Sockets=$CompInfo.numberofprocessors
-    #$Cores=$CompInfo.numberoflogicalprocessors
-    #$Sockets
-    
-	$infoObject = New-Object PSObject
-    #$PSObject=""
-    #$xxx = 0
-    #While ($xxx -le 0)
-    #{$xxx +=1
-		#The following add data to the infoObjects.	
-#if  ( ($infoObject.ServerName).Count -lt 1){		
-        if (($CPUInfo.Name).count -ge 2) {$CPUInfoName=$CPUInfo.Name[0]}
+    $infoObject = New-Object PSObject
+    if (($CPUInfo.Name).count -ge 2) {$CPUInfoName=$CPUInfo.Name[0]}
         else { $CPUInfoName=$CPUInfo.Name } 
-        Add-Member -inputObject $infoObject -memberType NoteProperty -name "ServerName"              -value $CompInfo.Name 
-#}
-		
-        Add-Member -inputObject $infoObject -memberType NoteProperty -name "Processor"               -value $CPUInfoName
-		#Add-Member -inputObject $infoObject -memberType NoteProperty -name "Model"                   -value $CPUInfo.Caption
+        Add-Member -inputObject $infoObject -memberType NoteProperty -name "ServerName"              -value $CompInfo.Name
+		Add-Member -inputObject $infoObject -memberType NoteProperty -name "Processor"               -value $CPUInfoName
 		Add-Member -inputObject $infoObject -memberType NoteProperty -name "Manufacturer"            -value $CompInfo.Manufacturer
-		#Add-Member -inputObject $infoObject -memberType NoteProperty -name "PhysicalCores"           -value $CPUInfo.NumberOfCores
 		Add-Member -inputObject $infoObject -memberType NoteProperty -name "PhysicalCores"           -value  $CompInfo.NumberOfProcessors
         Add-Member -inputObject $infoObject -memberType NoteProperty -name "LogicalCores"            -value  $CompInfo.NumberOfLogicalProcessors
-        #Add-Member -inputObject $infoObject -memberType NoteProperty -name "CPU_L2CacheSize"         -value $CPUInfo.L2CacheSize
-		#Add-Member -inputObject $infoObject -memberType NoteProperty -name "CPU_L3CacheSize"         -value $CPUInfo.L3CacheSize
-		#Add-Member -inputObject $infoObject -memberType NoteProperty -name "Sockets"                 -value $CPUInfo.SocketDesignation
-		
-		Add-Member -inputObject $infoObject -memberType NoteProperty -name "OS_Name"                 -value $OSInfo.Caption
+        Add-Member -inputObject $infoObject -memberType NoteProperty -name "OS_Name"                 -value $OSInfo.Caption
 		Add-Member -inputObject $infoObject -memberType NoteProperty -name "OS_Version"              -value $OSInfo.Version
 		Add-Member -inputObject $infoObject -memberType NoteProperty -name "TotalPhysical_Memory_GB" -value $PhysicalMemory
 		Add-Member -inputObject $infoObject -memberType NoteProperty -name "TotalVirtual_Memory_MB"  -value $OSTotalVirtualMemory
+		#Add-Member -inputObject $infoObject -memberType NoteProperty -name "Model"                   -value $CPUInfo.Caption
+        #Add-Member -inputObject $infoObject -memberType NoteProperty -name "PhysicalCores"           -value $CPUInfo.NumberOfCores
+        #Add-Member -inputObject $infoObject -memberType NoteProperty -name "CPU_L2CacheSize"         -value $CPUInfo.L2CacheSize
+		#Add-Member -inputObject $infoObject -memberType NoteProperty -name "CPU_L3CacheSize"         -value $CPUInfo.L3CacheSize
+		#Add-Member -inputObject $infoObject -memberType NoteProperty -name "Sockets"                 -value $CPUInfo.SocketDesignation
 		
         $xxx=$VolumeSize.Count
         While ($xxx -ge 1)
@@ -132,18 +122,10 @@ function Get-RemoteHardwareSoftwareInfo
         Add-Member -inputObject $infoObject -memberType NoteProperty -name "VolumeName_$NameVol" -Value $VolumeSize[$xxx-1]
         $xxx-=1; 
         }
-        #Add-Member -inputObject $infoObject -memberType NoteProperty -name "TotalVisible_Memory_MB"  -value $OSTotalVisibleMemory
-		$infoObject #Output to the screen for a visual feedback.
-		#$infoColl += $infoObject
-        #}
-	#}
-} | Select-Object * -ExcludeProperty PSComputerName, RunspaceId, PSShowComputerName| sort $CompInfo.Name |`
- Export-Csv -path c:\temp\Server_Inventory_$((Get-Date).ToString('MM-dd-yyyy')).csv -NoTypeInformation #Export the results in csv file.
-
-        #if ($pscmdlet.ShouldProcess("Target", "Operation"))
-        #{
-        #}
-    }
+        $infoObject #Output to the screen for a visual feedback.
+	} | Select-Object * -ExcludeProperty PSComputerName, RunspaceId, PSShowComputerName| sort $CompInfo.Name |`
+ Export-Csv -path c:\temp\Server_Inventory_$((Get-Date).ToString('MM-dd-yyyy')).csv -NoTypeInformation -Encoding UTF8 #Export the results in csv file.
+     }
     End
     {
     }
