@@ -137,9 +137,9 @@
         $script:servers+="HO-SHK2-N084"    #Adding computers just for script test
         $script:servers+="HO-SHK2-N033"    #Adding computers just for script test
         $LocalHostName = $env:COMPUTERNAME
-        ($servers).Count
-        Write-Host   "servers.Count"=$servers.Count
-        for ($i = 0; $i -lt $servers.Count; $i++)   {
+        #Write-Host   "servers.count = "($servers).Count
+        Write-Host   "servers.Count"=($servers).Count
+        for ($i = 0; $i -lt ($servers).Count; $i++)   {
             Write-Host "i="$i" " -NoNewline
             Write-Host   "script:servers.Count"=($script:servers).Count #| Get-TypeData
             if ($servers[$i] -ne $LocalHostName)   
@@ -232,7 +232,7 @@
 }
      #}
      Get-ServersFromOU $servers
-     #!!!Get-HardwareSoftwareInfo   $OutputCsvFile
+     Get-HardwareSoftwareInfo   $OutputCsvFile
     #Invoke-Command -ComputerName $remoteservers -ScriptBlock {Param ($servers, $OutputCsvFile) Get-HardwareSoftwareInfo }
     #Invoke-Command -ScriptBlock {Param($fn,$name) $fn.Invoke($name)} -Args ${Function:Test-Function},'John'
     #Invoke-Command -ComputerName $remoteservers -ArgumentList $OutputCsvFile -ScriptBlock {Get-HardwareSoftwareInfo}
@@ -240,7 +240,8 @@
     #Invoke-Command -ComputerName $remoteservers -ScriptBlock {Param ($Fn,$OutputCsvFile) $fn.Invoke($OutputCsvFile)} -args ${fuction:Get-HardwareSoftwareInfo}       
     #$MWFO_Log = "Microsoft-Windows-Forwarding/Operational"
     #Invoke-Command -ComputerName Server01 -ScriptBlock {Get-EventLog -LogName $Using:MWFO_Log -Newest 10}
-    Invoke-Command -ComputerName $remoteservers -ScriptBlock ${function:Get-HardwareSoftwareInfo}
+    Write-Host outputcsvfile=$OutputCsvFile
+    Invoke-Command -ComputerName $remoteservers -ScriptBlock {${function:Get-HardwareSoftwareInfo}; $using:OutputCsvFile} -ArgumentList $OutputCsvFile
     # $using:OutputCsvFile}
     #${Function:Get-NetConfig}
 
