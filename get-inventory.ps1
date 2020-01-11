@@ -1,8 +1,24 @@
 ﻿<#
 .Synopsis
-   Краткое описание
+   Данный скрипт позволяет опросить сервера в AD и получить их физические и логические параметры
 .DESCRIPTION
-   Длинное описание
+   Скрипт в качестве входных параметров принимает OU в которой будет происходить поиск, а также фильтр для включения и/или исключения перечня серверов для опроса
+    их характеристкик. Значения, которые возвращает скрипт: 
+    ServerName	- DNS имя сервера
+    Processor - модель процессора, например, Intel(R) Core(TM) i5-2410M CPU @ 2.30GHz или Intel(R) Xeon(R) CPU E5-2697 v3 @ 2.60GHz
+	Manufacturer - производитель сервера, например Hewlett-Packard, VMware, Inc.
+	PhysicalCores - количество физических процессоров
+	LogicalCores - количество ядер у процессора	
+    OS_Name	- название операционной системы, например, Майкрософт Windows 10 Корпоративная, Microsoft Windows Server 2012 R2 Standard
+    OS_Version	- версия операционной системы, например 10.0.17134, 06.03.9600
+    TotalPhysical_Memory_GB	- количество физической памяти установленной в системе
+    TotalVirtual_Memory_MB - количество виртуальной памяти установленной в системе
+    VolumeName_D	VolumeName_C - названия дисков, установленных в ОС	
+    IPAddr_3	IPSubnet_3	
+    IPAddr_2	IPSubnet_2	
+    IPAddr_1	IPSubnet_1 - для каждого IP адреса найденного при опросе, выдается его значение и подсеть
+
+
 .EXAMPLE
    Пример использования этого командлета
 .EXAMPLE
@@ -10,15 +26,20 @@
 .INPUTS
    Входные данные в этот командлет (при наличии)
 .OUTPUTS
-   Выходные данные из этого командлета (при наличии)
+   Вся выходная информация записывается в сcsv файл c:\temp\Server_Inventory_дата в формате 'dd-MM-yyyy'
 .NOTES
-   Общие примечания
+   В Укртелекоме удаленный доступ к серверам разрешен только под учетными записями, которые начинаются с adm- скрипт это проверяет, и если учетная запись пользователя 
+   который запустил скрипт не содержит adm-... то запрашиваются учетные данные под которыми будет происходить опрос серверов. 
+   Сервера должны находится в как и компьютер, который их опрашивает. Иначе опрос не произойдет. Это ограничение (когда опрашивающий и опрашиваемые компьютеры находятся 
+   в разных доменах, можно обойти, но данная задача не решается этим скриптом, т.к. параметры доступа должны настраиваться вне этого скрипта.  
+   Если пользователь не является членом группы доменных администраторов, то он должен входить в группу локальных администраторов каждого компьютера, который необходимо 
+   опросить. 
 .COMPONENT
    Компонент, к которому принадлежит этот командлет
 .ROLE
    Роль, к которой принадлежит этот командлет
 .FUNCTIONALITY
-   Функциональность, наиболее точно описывающая этот командлет
+   Опросить удаленные компьютеры, получить информацию о hardware & OS установленных на этих компьютерах. Изменения на удаленные компьютеры не вносятся. 
 #>
 function Get-RemoteHardwareSoftwareInfo
 {
@@ -31,7 +52,7 @@ function Get-RemoteHardwareSoftwareInfo
     [OutputType([String])]
     Param
     (
-        # Справочное описание параметра 1
+        # Путь к OU В котором будет происходить поиск серверов для опроса 
         [Parameter(Mandatory=$true, 
                    ValueFromPipeline=$true,
                    ValueFromPipelineByPropertyName=$true, 
@@ -46,7 +67,7 @@ function Get-RemoteHardwareSoftwareInfo
         #$SearchBaseAD= "OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc",
         $SearchBaseAD= 'OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc',
 
-        # Справочное описание параметра 2
+        # Маска для поиска серверов, также можно добавить сервера, которые необходимо исключить из опроса
         [Parameter(ParameterSetName='Servers Filter Set')]
         #[ValidatePattern("[a-z]*")]
         #[ValidateLength(0,15)]
@@ -57,7 +78,10 @@ function Get-RemoteHardwareSoftwareInfo
             -and (dnshostname -like 'kv-crm*'`
             -and  dnshostname -notlike 'kv-crmadm*'`
             -and  dnshostname -notlike 'kv-crmtst*'` 
-            -and  dnshostname -notlike 'kv-crmprp*')"
+            -and  dnshostname -notlike 'kv-crmprp*')",
+        # Маска для поиска серверов, также можно добавить сервера, которые необходимо исключить из опроса
+        [Parameter(ParameterSetName='Servers Filter Set')]
+        $OutputCsvFile="c:\temp\Server_Inventory_$((Get-Date).ToString('dd-MM-yyyy')).csv"
     )
 
     Begin
@@ -169,7 +193,7 @@ function Get-RemoteHardwareSoftwareInfo
         }   
         $infoObject #Output to the screen for a visual feedback.
 	} | Select-Object * -ExcludeProperty PSComputerName, RunspaceId, PSShowComputerName | sort servername | `
- Export-Csv -path c:\temp\Server_Inventory_$((Get-Date).ToString('MM-dd-yyyy')).csv -NoTypeInformation -Encoding UTF8 #Export the results in csv file.
+ Export-Csv -path $OutputCsvFile -NoTypeInformation -Encoding UTF8 #Export the results in csv file.
      }
     End
     {
