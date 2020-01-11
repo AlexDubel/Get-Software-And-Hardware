@@ -17,8 +17,6 @@
     IPAddr_3	IPSubnet_3	
     IPAddr_2	IPSubnet_2	
     IPAddr_1	IPSubnet_1 - для каждого IP адреса найденного при опросе, выдается его значение и подсеть
-
-
 .EXAMPLE
    Пример использования этого командлета
 .EXAMPLE
@@ -26,11 +24,11 @@
 .INPUTS
    Входные данные в этот командлет (при наличии)
 .OUTPUTS
-   Вся выходная информация записывается в сcsv файл c:\temp\Server_Inventory_дата в формате 'dd-MM-yyyy'
+   Вся выходная информация по умолчанию записывается в csv файл c:\temp\Server_Inventory_дата в формате 'dd-MM-yyyy'
 .NOTES
    В Укртелекоме удаленный доступ к серверам разрешен только под учетными записями, которые начинаются с adm- скрипт это проверяет, и если учетная запись пользователя 
    который запустил скрипт не содержит adm-... то запрашиваются учетные данные под которыми будет происходить опрос серверов. 
-   Сервера должны находится в как и компьютер, который их опрашивает. Иначе опрос не произойдет. Это ограничение (когда опрашивающий и опрашиваемые компьютеры находятся 
+   Сервера должны находится в домене как и компьютер, который их опрашивает. Иначе опрос не произойдет. Это ограничение (когда опрашивающий и опрашиваемые компьютеры находятся 
    в разных доменах, можно обойти, но данная задача не решается этим скриптом, т.к. параметры доступа должны настраиваться вне этого скрипта.  
    Если пользователь не является членом группы доменных администраторов, то он должен входить в группу локальных администраторов каждого компьютера, который необходимо 
    опросить. 
@@ -41,12 +39,11 @@
 .FUNCTIONALITY
    Опросить удаленные компьютеры, получить информацию о hardware & OS установленных на этих компьютерах. Изменения на удаленные компьютеры не вносятся. 
 #>
-function Get-RemoteHardwareSoftwareInfo
-{
+function Get-RemoteHardwareSoftwareInfo {
     [CmdletBinding(DefaultParameterSetName='Parameter Set 1', 
-                  SupportsShouldProcess=$true, 
+                  #SupportsShouldProcess=$true, 
                   PositionalBinding=$false,
-                  HelpUri = 'http://www.microsoft.com/',
+                  HelpUri = 'http://www.ukrtelecom.ua/', #Change This :)
                   ConfirmImpact='Low')] #только опрашиваем, поэтому влияние отсутствует (минимально).
     [Alias()]
     [OutputType([String])]
@@ -63,31 +60,40 @@ function Get-RemoteHardwareSoftwareInfo
         #[ValidateNotNullOrEmpty()]
         #[ValidateCount(0,5)]
         #[ValidateSet("sun", "moon", "earth")]
-        [String]
+        [String]$SearchBaseAD, 
         #$SearchBaseAD= "OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc",
-        $SearchBaseAD #= ""
         #= 'OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc',
-
         # Маска для поиска серверов, также можно добавить сервера, которые необходимо исключить из опроса
         [Parameter(ParameterSetName='Servers Filter Set',
         Position = 1)]
 		#$ServersFilter = "{ OperatingSystem -Like `"*Windows Server*`" -and dnshostname -like `"kv-crm*`"}"
-        $ServersFilter = "OperatingSystem`
-            -like '*Windows Server*'`
-            -and (dnshostname -like 'kv-crm*'`
-            -and  dnshostname -notlike 'kv-crmadm*'`
-            -and  dnshostname -notlike 'kv-crmtst*'`
-            -and  dnshostname -notlike 'kv-crmprp*')",
+        $ServersFilter,
         ## Маска для поиска серверов, также можно добавить сервера, которые необходимо исключить из опроса
         #[Parameter(ParameterSetName='Servers Filter Set')]
-        $OutputCsvFile="c:\temp\Server_Inventory_$((Get-Date).ToString('dd-MM-yyyy')).csv"
+        $OutputCsvFile,
+        [string] $ADControllers;
     )
 
     Begin
     {
     #[Threading.Thread]::CurrentThread.CurrentUICulture = 'en-US';
-    $SearchBaseAD = 'OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc'
-
+    if ($SearchBaseAD -eq "") {
+        $SearchBaseAD = 'OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc'    
+        }
+    if ($ServersFilter -eq "") {
+        $ServersFilter = "OperatingSystem -like '*Windows Server*' 
+        -and (dnshostname -like 'kv-crm*'`
+        -and  dnshostname -notlike 'kv-crmadm*'`
+        -and  dnshostname -notlike 'kv-crmtst*'`
+        -and  dnshostname -notlike 'kv-crmprp*')"   
+        }
+    if ($OutputCsvFile -eq "") {
+        $OutputCsvFile="c:\temp\Server_Inventory_$((Get-Date).ToString('dd-MM-yyyy')).csv"
+        }    
+    if ($ADControllers -eq "") {
+        $ADControllers="" # Change This
+        }
+        
     $CurrUser=($env:USERNAME).ToString()
     [array]$servers=""
     if ($CurrUser -notmatch "adm") {$Cred = Get-Credential -UserName "Corp\adm-odubel" `
