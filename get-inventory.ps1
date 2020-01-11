@@ -67,11 +67,11 @@ function Get-RemoteHardwareSoftwareInfo {
         [Parameter(ParameterSetName='Servers Filter Set',
         Position = 1)]
 		#$ServersFilter = "{ OperatingSystem -Like `"*Windows Server*`" -and dnshostname -like `"kv-crm*`"}"
-        $ServersFilter,
+        [string]$ServersFilter,
         ## Маска для поиска серверов, также можно добавить сервера, которые необходимо исключить из опроса
         #[Parameter(ParameterSetName='Servers Filter Set')]
-        $OutputCsvFile,
-        [string] $ADControllers;
+        [string]$OutputCsvFile,
+        [string]$ADControllers
     )
 
     Begin
@@ -91,7 +91,7 @@ function Get-RemoteHardwareSoftwareInfo {
         $OutputCsvFile="c:\temp\Server_Inventory_$((Get-Date).ToString('dd-MM-yyyy')).csv"
         }    
     if ($ADControllers -eq "") {
-        $ADControllers="" # Change This
+        $ADControllers=(Resolve-DnsName -Type NS ukrtelecom.loc).namehost # Change This
         }
         
     $CurrUser=($env:USERNAME).ToString()
@@ -104,23 +104,28 @@ function Get-RemoteHardwareSoftwareInfo {
              Write-Host "You didn't entered password. Exiting..." -ForegroundColor Red
              exit 
             }
-    try { $servers = (Get-ADComputer -Credential $Cred -SearchBase $SearchBaseAD -Filter $ServersFilter).name }
+    for ($i = 0; $i -lt $ADControllers.Count; $i++) {
+    try { $servers = (Get-ADComputer -Server $ADControllers[$i]  -Credential $Cred -SearchBase $SearchBaseAD -Filter $ServersFilter).name }
     catch  {
-            Write-Host "Can't contact AD to get list of servers in OU" -ForegroundColor Yellow
-            Write-Host "Exiting..." -ForegroundColor Yellow
-            exit
+            Write-Host "Can't contact AD controller $ADControllers[$i] to get list of servers in OU" -ForegroundColor Yellow
+                if ($i -eq ($ADControllers.Count-1)) {
+                Write-Host "Exiting..." -ForegroundColor Red
+                exit
+                }
             }
     }
-    else 
-    {
-    try { $servers = (Get-ADComputer -SearchBase $SearchBaseAD -Filter $ServersFilter).name }
-    catch   {
-            Write-Host "Can't contact AD to get list of servers in OU" -ForegroundColor Yellow
-            Write-Host "Exiting..." -ForegroundColor Yellow
-            exit
-            }
-    #$servers = (Get-ADComputer -SearchBase "OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc" -Filter { OperatingSystem -Like "*Windows Server*" -and dnshostname -like "kv-crmapp*" }).name    
-    }
+}
+        else 
+        {
+        try { $servers = (Get-ADComputer -SearchBase $SearchBaseAD -Filter $ServersFilter).name }
+        catch   {
+                Write-Host "Can't contact AD to get list of servers in OU" -ForegroundColor Yellow
+                Write-Host "Exiting..." -ForegroundColor Yellow
+                exit
+                }
+        #$servers = (Get-ADComputer -SearchBase "OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc" -Filter { OperatingSystem -Like "*Windows Server*" -and dnshostname -like "kv-crmapp*" }).name    
+        }
+    
     #$servers = (Get-ADComputer -SearchBase $SearchBaseAD -Filter $ServersFilter).name
     #Get-ADComputer -Filter "Name -like ""$PartialName""" | select -ExpandProperty Name
     #$servers = (Get-ADComputer -SearchBase "OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc" -Filter ($ServersFilter)).name
@@ -141,11 +146,11 @@ function Get-RemoteHardwareSoftwareInfo {
 	        $CompInfo				= Get-WmiObject -class Win32_ComputerSystem
             #Get Memory Information. The data will be shown in a table as MB, rounded to the nearest second decimal.
 	        $OSTotalVirtualMemory	= [math]::round($OSInfo.TotalVirtualMemorySize / 1MB, 2)
-	        $OSTotalVisibleMemory	= [math]::round(($OSInfo.TotalVisibleMemorySize / 1MB), 2)
-	        $PhysicalMemory			= Get-WmiObject CIM_PhysicalMemory | Measure-Object -Property capacity -Sum | % { [Math]::Round(($_.sum / 1GB), 2) }
+	        #$OSTotalVisibleMemory	= [math]::round(($OSInfo.TotalVisibleMemorySize / 1MB), 2)
+	        $PhysicalMemory			= Get-WmiObject CIM_PhysicalMemory | Measure-Object -Property capacity -Sum | ForEach-Object { [Math]::Round(($_.sum / 1GB), 2) }
             $VolumeTemp				= Get-CimInstance Win32_LogicalDisk -Filter drivetype=3
-            $IPAddressName			= Get-NetIPAddress  -AddressFamily IPv4 | where { $PSItem.InterfaceAlias -notmatch 'Loopback'} | Select IPAddress
-            $IPSubNetName			= (Get-WmiObject Win32_NetworkAdapterConfiguration | Where IPEnabled | Select IPSubnet).IPSubnet
+            $IPAddressName			= Get-NetIPAddress  -AddressFamily IPv4 | Where-Object { $PSItem.InterfaceAlias -notmatch 'Loopback'} | Select-Object IPAddress
+            $IPSubNetName			= (Get-WmiObject Win32_NetworkAdapterConfiguration | Where-Object IPEnabled | Select-Object IPSubnet).IPSubnet
 			#$nwINFO				= Get-WmiObject Win32_NetworkAdapterConfiguration
     $infoObject = New-Object PSObject
     if (($CPUInfo.Name).count -ge 2) {$CPUInfoName=$CPUInfo.Name[0]}
@@ -165,7 +170,7 @@ function Get-RemoteHardwareSoftwareInfo {
 		#Add-Member -inputObject $infoObject -memberType NoteProperty -name "CPU_L3CacheSize"			-value $CPUInfo.L3CacheSize
 		#Add-Member -inputObject $infoObject -memberType NoteProperty -name "Sockets"					-value $CPUInfo.SocketDesignation
 		
-        $VolumeSize	= $VolumeTemp | % { [Math]::Round(($PSItem.Size / 1GB), 2)}
+        $VolumeSize	= $VolumeTemp | ForEach-Object { [Math]::Round(($PSItem.Size / 1GB), 2)}
         $VolumeName	= ($VolumeTemp).Name
 
         $xxx=$VolumeName.Count
@@ -197,11 +202,9 @@ function Get-RemoteHardwareSoftwareInfo {
         Add-Member -inputObject $infoObject -memberType NoteProperty -name "IPSubnet_$xxx"	-Value $IPSubNetName[0]
         }   
         $infoObject #Output to the screen for a visual feedback.
-	} | Select-Object * -ExcludeProperty PSComputerName, RunspaceId, PSShowComputerName | sort servername | `
+	} | Select-Object * -ExcludeProperty PSComputerName, RunspaceId, PSShowComputerName | Sort-Object servername | `
  Export-Csv -path $OutputCsvFile -NoTypeInformation -Encoding UTF8 #Export the results in csv file.
      }
-    End
-    {
-    }
+    End {  }
 }
 Get-RemoteHardwareSoftwareInfo
