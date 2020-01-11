@@ -68,13 +68,22 @@ function Get-RemoteHardwareSoftwareInfo
              Write-Host "You didn't entered password. Exiting..."
              exit 
             }
-    #$servers = (Get-ADComputer -Credential $Cred -SearchBase "OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc" -Filter { OperatingSystem -Like "*Windows Server*" -and dnshostname -like "kv-crmapp*" }).name    
-    $servers = (Get-ADComputer -Credential $Cred -SearchBase $SearchBaseAD -Filter $ServersFilter).name
+    try { $servers = (Get-ADComputer -Credential $Cred -SearchBase $SearchBaseAD -Filter $ServersFilter).name }
+    catch  {
+            Write-Host "Can't contact AD to get list of servers in OU" -ForegroundColor Yellow
+            Write-Host "Exiting..." -ForegroundColor Yellow
+            exit
+            }
     }
     else 
     {
+    try { $servers = (Get-ADComputer -SearchBase $SearchBaseAD -Filter $ServersFilter).name }
+    catch   {
+            Write-Host "Can't contact AD to get list of servers in OU" -ForegroundColor Yellow
+            Write-Host "Exiting..." -ForegroundColor Yellow
+            exit
+            }
     #$servers = (Get-ADComputer -SearchBase "OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc" -Filter { OperatingSystem -Like "*Windows Server*" -and dnshostname -like "kv-crmapp*" }).name    
-    $servers = (Get-ADComputer -SearchBase $SearchBaseAD -Filter $ServersFilter).name
     }
     #$servers = (Get-ADComputer -SearchBase $SearchBaseAD -Filter $ServersFilter).name
     #Get-ADComputer -Filter "Name -like ""$PartialName""" | select -ExpandProperty Name
@@ -86,16 +95,19 @@ function Get-RemoteHardwareSoftwareInfo
     }
     Process
     {
+    #New-PSSession -ComputerName $Servers 
+    
     Invoke-Command -ComputerName $servers -ScriptBlock {
-    $CPUInfo              = Get-WmiObject Win32_Processor            #Get CPU Information
-	$OSInfo               = Get-WmiObject Win32_OperatingSystem      #Get OS Information
-	$CompInfo             = Get-WmiObject -class Win32_ComputerSystem
-    #Get Memory Information. The data will be shown in a table as MB, rounded to the nearest second decimal.
-	$OSTotalVirtualMemory = [math]::round($OSInfo.TotalVirtualMemorySize / 1MB, 2)
-	$OSTotalVisibleMemory = [math]::round(($OSInfo.TotalVisibleMemorySize / 1MB), 2)
-	$PhysicalMemory       = Get-WmiObject CIM_PhysicalMemory | Measure-Object -Property capacity -Sum | % { [Math]::Round(($_.sum / 1GB), 2) }
-    $VolumeSize           = (Get-CimInstance Win32_LogicalDisk -Filter drivetype=3) | % { [Math]::Round(($PSItem.Size / 1GB), 2)}
-    $VolumeName           = (Get-CimInstance Win32_LogicalDisk -Filter drivetype=3).Name
+        $CPUInfo              = Get-WmiObject Win32_Processor            #Get CPU Information
+	    $OSInfo               = Get-WmiObject Win32_OperatingSystem      #Get OS Information
+	    $CompInfo             = Get-WmiObject -class Win32_ComputerSystem
+        #Get Memory Information. The data will be shown in a table as MB, rounded to the nearest second decimal.
+	    $OSTotalVirtualMemory = [math]::round($OSInfo.TotalVirtualMemorySize / 1MB, 2)
+	    $OSTotalVisibleMemory = [math]::round(($OSInfo.TotalVisibleMemorySize / 1MB), 2)
+	    $PhysicalMemory       = Get-WmiObject CIM_PhysicalMemory | Measure-Object -Property capacity -Sum | % { [Math]::Round(($_.sum / 1GB), 2) }
+        $VolumeSize           = (Get-CimInstance Win32_LogicalDisk -Filter drivetype=3) | % { [Math]::Round(($PSItem.Size / 1GB), 2)}
+        $VolumeName           = (Get-CimInstance Win32_LogicalDisk -Filter drivetype=3).Name
+ [array]$IPAddressName        = Get-NetIPAddress  -AddressFamily IPv4 | where { $PSItem.InterfaceAlias -notmatch 'Loopback'} | Select IPAddress
     
     $infoObject = New-Object PSObject
     if (($CPUInfo.Name).count -ge 2) {$CPUInfoName=$CPUInfo.Name[0]}
@@ -122,6 +134,35 @@ function Get-RemoteHardwareSoftwareInfo
         Add-Member -inputObject $infoObject -memberType NoteProperty -name "VolumeName_$NameVol" -Value $VolumeSize[$xxx-1]
         $xxx-=1; 
         }
+        
+        #$xxx=$IPAddressName.Count
+        #While ($xxx -ge 1)
+        #{
+        #$IPAddr=$IPAddressName[$xxx-1][0]
+        #Add-Member -inputObject $infoObject -memberType NoteProperty -name "IPAddr_($xxx-1)" -Value $IPAddr[$xxx-1]
+        #$xxx-=1; 
+        #}
+        
+        [array]$IPAddr=($IPAddressName).IPAddress
+        #Test
+        #$IPAddr+="172.20.1.0"
+        #$IPaddr+="172.20.1.1"
+        #$IPAddr+="172.20.1.2"
+        $xxx=$IPAddr.Count
+        if ($xxx -gt 1) {
+        While ($xxx -ge 1)
+                            {
+        #$IPAddr=($IPAddressName).IPAddress[$xxx-1]
+        Add-Member -inputObject $infoObject -memberType NoteProperty -name "IPAddr_$xxx" -Value $IPAddr[$xxx-1]
+        #Add-Member -inputObject $infoObject -memberType NoteProperty -name "IPAddr_($xxx-1)" -Value $IPAddr[$xxx-1]
+        #Write-Host " заголовок IPAddr_$xxx" "-значение IPAddr $IPAddr"
+        #Write-Host " заголовок IPAddr_$xxx" "-значение IPAddressName $IPAddressName[$xxx-1]"
+        $xxx-=1; 
+                            }
+                        }
+        else {
+        #$IPAddr=($IPAddressName).IPAddress
+        Add-Member -inputObject $infoObject -memberType NoteProperty -name "IPAddr_$xxx" -Value $IPAddr }   
         $infoObject #Output to the screen for a visual feedback.
 	} | Select-Object * -ExcludeProperty PSComputerName, RunspaceId, PSShowComputerName| sort $CompInfo.Name |`
  Export-Csv -path c:\temp\Server_Inventory_$((Get-Date).ToString('MM-dd-yyyy')).csv -NoTypeInformation -Encoding UTF8 #Export the results in csv file.
