@@ -71,7 +71,8 @@ function Get-RemoteHardwareSoftwareInfo {
         ## Маска для поиска серверов, также можно добавить сервера, которые необходимо исключить из опроса
         #[Parameter(ParameterSetName='Servers Filter Set')]
         [string]$OutputCsvFile,
-        [string]$ADControllers
+        [string]$ADDomainName,
+        [string[]]$ADControllers
     )
 
     Begin
@@ -90,10 +91,17 @@ function Get-RemoteHardwareSoftwareInfo {
     if ($OutputCsvFile -eq "") {
         $OutputCsvFile="c:\temp\Server_Inventory_$((Get-Date).ToString('dd-MM-yyyy')).csv"
         }    
-    if ($ADControllers -eq "") {
-        $ADControllers=(Resolve-DnsName -Type NS ukrtelecom.loc).namehost # Change This
-        }
+    if ($ADDomainName -eq "") {
+            $ADDomainName="ukrtelecom.loc"
+            }
         
+        if ($ADControllers -eq $null) {
+            $ADControllers=Get-ADForest $ADDomainName | Select-Object -Expand GlobalCatalogs -First 1
+            #$ADControllers=(Resolve-DnsName -Type NS $ADDomainName).namehost
+        }
+    Write-Host "ADControllers[0]="$ADControllers[0]
+    Write-Host "ADControllers[1]="$ADControllers[1]
+    #exit
     $CurrUser=($env:USERNAME).ToString()
     [array]$servers=""
     if ($CurrUser -notmatch "adm") {$Cred = Get-Credential -UserName "Corp\adm-odubel" `
@@ -105,27 +113,33 @@ function Get-RemoteHardwareSoftwareInfo {
              exit 
             }
     for ($i = 0; $i -lt $ADControllers.Count; $i++) {
-    try { $servers = (Get-ADComputer -Server $ADControllers[$i]  -Credential $Cred -SearchBase $SearchBaseAD -Filter $ServersFilter).name }
-    catch  {
+        try { $servers = (Get-ADComputer -Server $ADControllers[$i]  -Credential $Cred -SearchBase $SearchBaseAD -Filter $ServersFilter).name }
+        catch  {
             Write-Host "Can't contact AD controller $ADControllers[$i] to get list of servers in OU" -ForegroundColor Yellow
                 if ($i -eq ($ADControllers.Count-1)) {
                 Write-Host "Exiting..." -ForegroundColor Red
                 exit
+                    }
                 }
             }
-    }
-}
-        else 
-        {
-        try { $servers = (Get-ADComputer -SearchBase $SearchBaseAD -Filter $ServersFilter).name }
-        catch   {
-                Write-Host "Can't contact AD to get list of servers in OU" -ForegroundColor Yellow
-                Write-Host "Exiting..." -ForegroundColor Yellow
-                exit
-                }
-        #$servers = (Get-ADComputer -SearchBase "OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc" -Filter { OperatingSystem -Like "*Windows Server*" -and dnshostname -like "kv-crmapp*" }).name    
         }
-    
+    else 
+        {
+        for ($i = 0; $i -lt $ADControllers.Count; $i++) { 
+        try { $servers = (Get-ADComputer -Server '$ADControllers[$i]' -SearchBase $SearchBaseAD -Filter $ServersFilter).name }
+            catch   {
+                Write-Host "Can't contact AD controller" $ADControllers[$i] "to get list of servers in OU" -ForegroundColor Yellow
+                    if ($i -eq ($ADControllers.Count-1)) {
+                    Write-Host "Exiting..." -ForegroundColor Red
+                    #exit
+                        }
+                    }
+        #$servers = (Get-ADComputer -SearchBase "OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc" -Filter { OperatingSystem -Like "*Windows Server*" -and dnshostname -like "kv-crmapp*" }).name    
+                }
+        }        
+    $servers=(Get-ADComputer -Server $ADControllers[0] -SearchBase $SearchBaseAD -Filter $ServersFilter).name
+    Write-Host "servers="$servers -BackgroundColor Cyan
+    exit 
     #$servers = (Get-ADComputer -SearchBase $SearchBaseAD -Filter $ServersFilter).name
     #Get-ADComputer -Filter "Name -like ""$PartialName""" | select -ExpandProperty Name
     #$servers = (Get-ADComputer -SearchBase "OU=CRMBilling,OU=Servers,OU=KYIV,DC=corp,DC=ukrtelecom,DC=loc" -Filter ($ServersFilter)).name
