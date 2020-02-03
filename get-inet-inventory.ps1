@@ -70,7 +70,7 @@ if ($Email -eq $true){
 [string[]]  $AllComputersNames  = "kv-crmapp-01"
             $AllComputersNames += "kv-crmapp-02"
             $AllComputersNames += "kv-crmapp-03"
-Measure-command {
+# Measure-command {
  $AllComputersNames | ForEach-Object {
 
     $Connection = Test-Connection $PSItem -Count 1 -Quiet
@@ -99,9 +99,12 @@ Measure-command {
 
       $ComputerSerial = (Get-CimInstance Win32_Bios -ComputerName $PSItem).SerialNumber
 
-      $ComputerGraphics = Get-CimInstance -Class Win32_VideoController | select Name,@{Expression={$_.AdapterRAM / 1GB};Label="GraphicsRAM"}
+      $ComputerGraphics = Get-CimInstance -Class Win32_VideoController | Select-Object Name,@{Expression={$_.AdapterRAM / 1GB};Label="GraphicsRAM"}
 
       $ComputerSoundDevices = (Get-CimInstance -Class Win32_SoundDevice).Name
+      $Networks = Get-WmiObject Win32_NetworkAdapterConfiguration -ComputerName $PSItem | Where-Object {$PSItem.IPEnabled}
+      $IPAddress  = $Networks.IpAddress[2]
+      $MACAddress  = $Networks.MACAddress[1]
             
       $ComputerInfoManufacturer = $ComputerHW.Manufacturer
       $ComputerInfoModel = $ComputerHW.Model
@@ -134,7 +137,10 @@ Measure-command {
       $ComputerInfo | Add-Member -MemberType NoteProperty -Name "Graphics" -Value "$ComputerInfoGraphicsName"-Force
       $ComputerInfo | Add-Member -MemberType NoteProperty -Name "GraphicsRAM" -Value "$ComputerInfoGraphicsRAM"-Force
       $ComputerInfo | Add-Member -MemberType NoteProperty -Name "SoundDevices" -Value "$ComputerSoundDevices"-Force
-   }
+      $ComputerInfo | Add-Member -MemberType NoteProperty -Name "IPAddress" -Value "$IPAddress"-Force
+      $ComputerInfo | Add-Member -MemberType NoteProperty -Name "MACAddress" -Value "$MACAddress"-Force
+      
+    }
 
    $Inventory.Add($ComputerInfo) | Out-Null
 
@@ -147,5 +153,4 @@ Measure-command {
 }
 
 $Inventory | Export-Csv "C:\Temp\Scripts_Output\Inventory.csv" -Delimiter ";"
-}
 if ($Email -eq $true){send-mailmessage @EmailParameters}
