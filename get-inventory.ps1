@@ -84,7 +84,7 @@
             }
         if ($ServersFilter -eq "") {
             $ServersFilter = "OperatingSystem -like '*Windows Server*' 
-            -and (dnshostname -like 'kv-crm*'`
+            -and (dnshostname    -like 'kv-crm*'`
             -and  dnshostname -notlike 'kv-crmadm*'`
             -and  dnshostname -notlike 'kv-crmtst*'`
             -and  dnshostname -notlike 'kv-crmprp*')"   
@@ -105,7 +105,7 @@
         #for ($i = 0; $i -lt $ADControllers.Count; $i++) {
             try { $script:servers = (Get-ADComputer  -Credential $Cred -SearchBase $SearchBaseAD -Filter $ServersFilter).name }
             catch  {
-                Write-Host "Can't contact AD controller to get list of servers in OU" -ForegroundColor Yellow
+                Write-Host "Can't contact AD controller to get list of servers in $SearchBaseAD" -ForegroundColor Yellow
                     if ($i -eq ($ADControllers.Count-1)) {
                     Write-Host "Exiting..." -ForegroundColor Red
                     exit
@@ -137,6 +137,11 @@
         $script:servers+="HO-SHK2-N084"    #Adding computers just for script test
         $script:servers+="HO-SHK2-N033"    #Adding computers just for script test
         $LocalHostName = $env:COMPUTERNAME
+        ##Заглушка для всех предідущих команд $script:servers
+        #[string[]]$script:servers= "kv-crmapp-01"
+        #$script:servers+="kv-crmapp-02"
+        #$script:servers+="kv-crmapp-03"
+        
         #Write-Host   "servers.count = "($servers).Count
         Write-Host   "servers.Count"=($servers).Count
         for ($i = 0; $i -lt ($servers).Count; $i++)   {
@@ -242,6 +247,7 @@
     #Invoke-Command -ComputerName Server01 -ScriptBlock {Get-EventLog -LogName $Using:MWFO_Log -Newest 10}
     Write-Host outputcsvfile=$OutputCsvFile
     Invoke-Command -ComputerName $remoteservers -ScriptBlock {${function:Get-HardwareSoftwareInfo}; $using:OutputCsvFile} -ArgumentList $OutputCsvFile
+    #Invoke-command -scriptblock {Remove-SpecialVerboseItem -path c:\backup -verbose }
     # $using:OutputCsvFile}
     #${Function:Get-NetConfig}
 
