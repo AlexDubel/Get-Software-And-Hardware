@@ -71,32 +71,33 @@ if ($Email -eq $true){
             $AllComputersNames += "kv-crmapp-02"
             $AllComputersNames += "kv-crmapp-03"
 Measure-command {
-ForEach ($ComputerName in $AllComputersNames) {
+ $AllComputersNames | ForEach-Object {
 
-    $Connection = Test-Connection $ComputerName -Count 1 -Quiet
+    $Connection = Test-Connection $PSItem -Count 1 -Quiet
 
     $ComputerInfo = New-Object System.Object
 
-    $ComputerOS = Get-ADComputer $ComputerName -Properties OperatingSystem,OperatingSystemServicePack
+    $ComputerOS = Get-ADComputer $PSItem -Properties OperatingSystem,OperatingSystemServicePack
 
     $ComputerInfoOperatingSystem = $ComputerOS.OperatingSystem
     $ComputerInfoOperatingSystemServicePack = $ComputerOS.OperatingSystemServicePack
 
-    $ComputerInfo | Add-Member -MemberType NoteProperty -Name "Name" -Value "$ComputerName" -Force
+    $ComputerInfo | Add-Member -MemberType NoteProperty -Name "Name" -Value "$PSItem" -Force
     $ComputerInfo | Add-Member -MemberType NoteProperty -Name "OperatingSystem" -Value $ComputerInfoOperatingSystem
     $ComputerInfo | Add-Member -MemberType NoteProperty -Name "ServicePack" -Value $ComputerInfoOperatingSystemServicePack
 
     if ($Connection -eq "True"){
-        $ComputerHW = Get-CimInstance -Class Win32_ComputerSystem -ComputerName $ComputerName |
-            select Manufacturer,Model,NumberOfProcessors,@{Expression={$_.TotalPhysicalMemory / 1GB};Label="TotalPhysicalMemoryGB"}
+        $ComputerHW = Get-CimInstance -Class Win32_ComputerSystem -ComputerName $PSItem |
+            Select-Object Manufacturer,Model,NumberOfProcessors,@{Expression={[math]::Round(($_.TotalPhysicalMemory / 1GB), 2)};Label="TotalPhysicalMemoryGB"}
 
-        $ComputerCPU = Get-CimInstance win32_processor -ComputerName $ComputerName |
-            select DeviceID,Name,Manufacturer,NumberOfCores,NumberOfLogicalProcessors
+        $ComputerCPU = Get-CimInstance win32_processor -ComputerName $PSItem |
+            Select-Object DeviceID,Name,Manufacturer,NumberOfCores,NumberOfLogicalProcessors
+#$VolumeSize	= $VolumeTemp | ForEach-Object { [Math]::Round(($PSItem.Size / 1GB), 2)}
+#$VolumeName	= ($VolumeTemp).Name
+        $ComputerDisks = Get-CimInstance -Class Win32_LogicalDisk -Filter "DriveType=3" -ComputerName $PSItem |
+            Select-Object DeviceID,VolumeName,@{Expression={[math]::Round(($_.Size / 1GB), 2)};Label="SizeGB"}
 
-        $ComputerDisks = Get-CimInstance -Class Win32_LogicalDisk -Filter "DriveType=3" -ComputerName $ComputerName |
-            select DeviceID,VolumeName,@{Expression={$_.Size / 1GB};Label="SizeGB"}
-
-      $ComputerSerial = (Get-CimInstance Win32_Bios -ComputerName $ComputerName).SerialNumber
+      $ComputerSerial = (Get-CimInstance Win32_Bios -ComputerName $PSItem).SerialNumber
 
       $ComputerGraphics = Get-CimInstance -Class Win32_VideoController | select Name,@{Expression={$_.AdapterRAM / 1GB};Label="GraphicsRAM"}
 
@@ -145,6 +146,6 @@ ForEach ($ComputerName in $AllComputersNames) {
    $ComputerSoundDevices = ""
 }
 
-$Inventory | Export-Csv "C:\Temp\Scripts_Output\Inventory.csv"
+$Inventory | Export-Csv "C:\Temp\Scripts_Output\Inventory.csv" -Delimiter ";"
 }
 if ($Email -eq $true){send-mailmessage @EmailParameters}
